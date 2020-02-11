@@ -1,8 +1,8 @@
 #include "notify.h"
 
-uint8_t cwdir[PATH_MAX] = {0};
-uint8_t target_dir[PATH_MAX] = {0};
-uint8_t target_mount[PATH_MAX] = {0};
+char cwdir[PATH_MAX] = {0};
+char target_dir[PATH_MAX] = {0};
+char target_mount[PATH_MAX] = {0};
 int no_debug = 0;
 int pid_info = 0;
 
@@ -52,12 +52,12 @@ static void get_options(int argc, char **argv)
     }
     case 1:
     {
-      strncpy((char *)target_dir, optarg, PATH_MAX);
+      strncpy(target_dir, optarg, PATH_MAX);
       break;
     }
     case 2:
     {
-      strncpy((char *)target_mount, optarg, PATH_MAX);
+      strncpy(target_mount, optarg, PATH_MAX);
       break;
     }
     case 3:
@@ -91,9 +91,35 @@ static void get_options(int argc, char **argv)
     (void)end;
     if (! strnlen((const char *)target_dir, PATH_MAX))
     {
-      strncpy((char *)target_dir, (char *)cwdir, PATH_MAX);
+      strncpy(target_dir, cwdir, PATH_MAX);
     }
   }
+}
+
+/**
+ * returns non-zero if needle is in haystack, zero otherwise
+ **/
+static int filter_path(const char *haystack, const char *needle)
+{
+  int ccode = 0;
+  if ((haystack != NULL) && (needle != NULL))
+  {
+    size_t haystack_len = strnlen(haystack, PATH_MAX);
+    if ((haystack_len > 0) && (haystack_len < PATH_MAX))
+    {
+      size_t needle_len = strnlen(needle, PATH_MAX);
+      if ((needle_len > 0) &&
+          (needle_len < PATH_MAX) &&
+          (needle_len <= haystack_len))
+      {
+        if (strstr(haystack, needle) != NULL)
+        {
+          ccode = 1;
+        }
+      }
+    }
+  }
+  return ccode;
 }
 
 
@@ -111,10 +137,15 @@ static void get_pid_info(int32_t pid)
    * static vars are initialized by the compiler to zero, just trying
    * to be literate.
    **/
-  static uint8_t proc_buf[PROC_BUF_SIZE] = {0};
-  static uint8_t file_buf[FILE_BUF_SIZE] = {0};
-  snprintf((char *)proc_buf, PROC_BUF_SIZE, "/proc/%d", pid);
-  snprintf((char *)file_buf, FILE_BUF_SIZE, "%s/cmdline", proc_buf);
+  if (pid <= 0)
+  {
+    return;
+  }
+
+  static char proc_buf[PROC_BUF_SIZE] = {0};
+  static char file_buf[FILE_BUF_SIZE] = {0};
+  snprintf(proc_buf, PROC_BUF_SIZE, "/proc/%d", pid);
+  snprintf(file_buf, FILE_BUF_SIZE, "%s/cmdline", proc_buf);
 
   printf("pid: %d", pid);
   int proc_fd = open((const char *)file_buf, O_RDONLY | O_CLOEXEC);
@@ -140,7 +171,6 @@ static void permission(int fd, const struct fanotify_event_metadata *data)
 {
   struct fanotify_response response = {.fd = data->fd,
                                          .response = FAN_ALLOW};
-  get_pid_info(data->pid);
   write(fd, &response, sizeof(struct fanotify_response));
   return;
 }
@@ -149,8 +179,8 @@ static void permission(int fd, const struct fanotify_event_metadata *data)
 static void read_poll(int fd)
 {
   static struct fanotify_event_metadata poll_buf[POLL_BUF_SIZE] = {0};
-  static uint8_t _path[PATH_MAX] = {0};
-  static uint8_t file_path[PATH_MAX] = {0};
+  static char _path[PATH_MAX] = {0};
+  static char file_path[PATH_MAX] = {0};
 
   size_t len = read(fd, (void *)poll_buf, POLL_BUF_SIZE);
   if (len == -1 && errno != EAGAIN)
@@ -171,23 +201,42 @@ static void read_poll(int fd)
       exit(EXIT_FAILURE);
     }
 
-    if (pid_info && (metadata->mask & FA_PERM_MASK) &&
-        (metadata->fd >= 0) && (metadata->pid >= 0))
-    {
-      permission(fd, metadata);
-    }
 
     if (metadata->fd >= 0)
     {
-      snprintf((char *)_path, PATH_MAX, "/proc/self/fd/%d", metadata->fd);
-      size_t path_len = readlink((char *)_path, (char *)file_path, PATH_MAX - 1);
+      /**
+       * marshall the file path and then see if it passes the filter
+       **/
+      snprintf(_path, PATH_MAX, "/proc/self/fd/%d", metadata->fd);
+      size_t path_len = readlink(_path, file_path, PATH_MAX - 1);
       if (path_len == -1) {
         perror("readlink");
         exit(EXIT_FAILURE);
       }
-
       file_path[path_len] = '\0';
-      printf("File %s\n\n", file_path);
+
+      /**
+       * see if it passes the filter
+       **/
+      if (filter_path(file_path, target_dir))
+      {
+        if ((metadata->mask & FA_PERM_MASK) && (metadata->fd >= 0))
+        {
+          permission(fd, metadata);
+        }
+        if (pid_info)
+        {
+          get_pid_info(metadata->pid);
+        }
+      }
+
+      /**
+       * allow by default for now
+       **/
+      if ((metadata->mask & FA_PERM_MASK) && (metadata->fd >= 0))
+      {
+        permission(fd, metadata);
+      }
       close(metadata->fd);
     }
     metadata = FAN_EVENT_NEXT(metadata, len);
@@ -203,7 +252,7 @@ int main(int argc, char **argv)
 
   char in_buf[16] = {0};
 
-  if (NULL == getcwd((char *)cwdir, PATH_MAX))
+  if (NULL == getcwd(cwdir, PATH_MAX))
   {
     perror("getcwd()");
     exit(EXIT_FAILURE);
