@@ -10,7 +10,7 @@ static void usage(void)
 {
   printf("usage: notify <options>\n");
   printf("\t --help\n");
-  printf("\t --path the directory path to monitor (\"/\" if not specified)\n");
+  printf("\t --path the directory path to monitor\n");
   printf("\t --permission <allow | deny> grant or revoke access to <path>\n");
   printf("\t --nodebug prevent this program from being run or attached to by a debugger\n");
   printf("\t --pidinfo attempt to collect data about the process acting on the file (system)\n");
