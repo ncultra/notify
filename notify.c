@@ -1,18 +1,16 @@
 #include "notify.h"
 
-char cwdir[PATH_MAX] = {0};
 char target_dir[PATH_MAX] = {0};
-char target_mount[PATH_MAX] = {0};
 int no_debug = 0;
 int pid_info = 0;
-
+int perm = 0;
 
 static void usage(void)
 {
   printf("usage: notify <options>\n");
   printf("\t --help\n");
   printf("\t --path the directory path to monitor (cwd if not specified)\n");
-  printf("\t --mount the mount point to monitor (mutually exclusive to --path)\n");
+  printf("\t --permission <allow | deny> grant or revoke access to <path>\n");
   printf("\t --nodebug prevent this program from being run or attached to by a debugger\n");
   printf("\t --pidinfo attempt to collect data about the process acting on the file (system)\n");
 
@@ -25,12 +23,11 @@ static void get_options(int argc, char **argv)
   while (1)
   {
     int c = -1;
-    char *end = NULL;
 
     static struct option long_options[] = {
       {"help", no_argument, NULL, 0},     /** 0 help **/
       {"path", required_argument, NULL, 1},
-      {"mount", required_argument, NULL, 2},
+      {"permission", required_argument, NULL, 2},
       {"nodebug", no_argument, &no_debug, 3},
       {"pidinfo", no_argument, &pid_info, 4},
       {0, 0, 0, 0}
@@ -57,7 +54,14 @@ static void get_options(int argc, char **argv)
     }
     case 2:
     {
-      strncpy(target_mount, optarg, PATH_MAX);
+      if (! strncasecmp("allow", optarg, 5))
+      {
+        perm = FAN_ALLOW;
+      }
+      else if (! strncasecmp("deny", optarg, 4))
+      {
+        perm = FAN_DENY;
+      }
       break;
     }
     case 3:
@@ -87,11 +91,9 @@ static void get_options(int argc, char **argv)
     }
 
     }
-
-    (void)end;
     if (! strnlen((const char *)target_dir, PATH_MAX))
     {
-      strncpy(target_dir, cwdir, PATH_MAX);
+      strncpy(target_dir, "/", PATH_MAX);
     }
   }
 }
@@ -141,36 +143,59 @@ static void get_pid_info(int32_t pid)
   {
     return;
   }
-
+  int bytes_read = 0, proc_fd = -1;
   static char proc_buf[PROC_BUF_SIZE] = {0};
   static char file_buf[FILE_BUF_SIZE] = {0};
   snprintf(proc_buf, PROC_BUF_SIZE, "/proc/%d", pid);
-  snprintf(file_buf, FILE_BUF_SIZE, "%s/cmdline", proc_buf);
+
 
   printf("pid: %d", pid);
-  int proc_fd = open((const char *)file_buf, O_RDONLY | O_CLOEXEC);
+
+  /**
+   * print the process' command line
+   **/
+  snprintf(file_buf, FILE_BUF_SIZE, "%s/cmdline", proc_buf);
+  proc_fd = open(file_buf, O_RDONLY);
   if (proc_fd == -1)
   {
     printf(" (expired)\n");
     return;
   }
-
-  int bytes_read = read(proc_fd, file_buf, FILE_BUF_SIZE);
+  bytes_read = read(proc_fd, file_buf, FILE_BUF_SIZE);
   if (bytes_read > 0)
   {
     printf("\ncommand line: %s\n", file_buf);
   }
+  close(proc_fd);
 
+  /**
+   * print the process' stack
+   **/
+  snprintf(file_buf, FILE_BUF_SIZE, "%s/stack", proc_buf);
+  proc_fd = open(file_buf, O_RDONLY);
+  if (proc_fd == -1)
+  {
+    printf(" (expired)\n");
+    return;
+  }
+  bytes_read = read(proc_fd, file_buf, FILE_BUF_SIZE);
+  if (bytes_read > 0)
+  {
+    printf("\nstack: %s\n", file_buf);
+  }
+  close(proc_fd);
   memset(proc_buf, 0x00, PROC_BUF_SIZE);
   memset(file_buf, 0x00, FILE_BUF_SIZE);
 
   return;
 }
 
-static void permission(int fd, const struct fanotify_event_metadata *data)
+static void permission(int fd,
+                       const struct fanotify_event_metadata *data,
+                       uint32_t action)
 {
   struct fanotify_response response = {.fd = data->fd,
-                                         .response = FAN_ALLOW};
+                                       .response = action};
   write(fd, &response, sizeof(struct fanotify_response));
   return;
 }
@@ -201,7 +226,6 @@ static void read_poll(int fd)
       exit(EXIT_FAILURE);
     }
 
-
     if (metadata->fd >= 0)
     {
       /**
@@ -216,26 +240,28 @@ static void read_poll(int fd)
       file_path[path_len] = '\0';
 
       /**
-       * see if it passes the filter
+       * see if it is caught by the filter
        **/
       if (filter_path(file_path, target_dir))
       {
-        if ((metadata->mask & FA_PERM_MASK) && (metadata->fd >= 0))
-        {
-          permission(fd, metadata);
-        }
+        printf("\n%s\n", file_path);
         if (pid_info)
         {
           get_pid_info(metadata->pid);
         }
+
+        if ((metadata->mask & FA_PERM_MASK) && (metadata->fd >= 0))
+        {
+          permission(fd, metadata, perm);
+        }
       }
 
       /**
-       * allow by default for now
+       * if permission mask, allow for all that pass the filter
        **/
       if ((metadata->mask & FA_PERM_MASK) && (metadata->fd >= 0))
       {
-        permission(fd, metadata);
+        permission(fd, metadata, FAN_ALLOW);
       }
       close(metadata->fd);
     }
@@ -252,16 +278,8 @@ int main(int argc, char **argv)
 
   char in_buf[16] = {0};
 
-  if (NULL == getcwd(cwdir, PATH_MAX))
-  {
-    perror("getcwd()");
-    exit(EXIT_FAILURE);
-  }
-
   get_options(argc, argv);
-  printf("cwd: %s\n", cwdir);
   printf("target dir: %s\n", target_dir);
-  printf("target mount: %s\n", target_mount);
 
   int notify_fd = fanotify_init(FA_INIT_FLAGS, FA_INIT_EVENT_FLAGS);
   if (notify_fd == -1)
@@ -269,11 +287,20 @@ int main(int argc, char **argv)
     perror("fanotify_init()");
     exit(EXIT_FAILURE);
   }
-  printf("notify fd: %d\n", notify_fd);
+
+  uint64_t mask = 0;
+  if (perm != 0)
+  {
+    mask = FA_PERM_MASK;
+  }
+  else
+  {
+    mask = FA_MARK_MASK;
+  }
 
   if (fanotify_mark(notify_fd,
                     FA_MARK_FLAGS,
-                    FA_MARK_MASK,
+                    mask,
                     AT_FDCWD,
                     (const char *)target_dir))
   {

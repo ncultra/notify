@@ -16,16 +16,13 @@
 #include <string.h>
 #include <time.h>
 
-#if 0
-       int open(const char *pathname, int flags);
-       int open(const char *pathname, int flags, mode_t mode);
-#endif
 #define FA_INIT_FLAGS (FAN_CLOEXEC | FAN_CLASS_PRE_CONTENT | FAN_NONBLOCK)
 #define FA_INIT_EVENT_FLAGS (O_RDONLY | O_LARGEFILE)
 
 #define FA_MARK_FLAGS (FAN_MARK_ADD | FAN_MARK_FILESYSTEM)
 #define FA_PERM_MASK (FAN_ACCESS_PERM | FAN_OPEN_PERM | FAN_OPEN_EXEC_PERM)
-#define FA_MARK_MASK FAN_ACCESS
+#define FA_MARK_MASK (FAN_ACCESS | FAN_MODIFY | FAN_CLOSE | FAN_CREATE | \
+                      FAN_DELETE | FAN_OPEN)
 
 //| FAN_CLOSE_WRITE |
 //                      FAN_CLOSE_NOWRITE  | FAN_DELETE | FAN_OPEN_EXEC )
