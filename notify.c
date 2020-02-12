@@ -132,6 +132,9 @@ static int filter_path(const char *haystack, const char *needle)
  *
  * When we do get notified for a running process, we can read files
  * from /proc/<pid>.
+ *
+ * When using the --permission argument, /proc/<pid> will usually be
+ * evaluated before the process is dead.
  **/
 static void get_pid_info(int32_t pid)
 {
@@ -245,6 +248,7 @@ static void read_poll(int fd)
       if (filter_path(file_path, target_dir))
       {
         printf("\n%s\n", file_path);
+        printf("access mask: %016llx\n", metadata->mask);
         if (pid_info)
         {
           get_pid_info(metadata->pid);
