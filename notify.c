@@ -206,7 +206,7 @@ static void permission(int fd,
 
 static void read_poll(int fd)
 {
-  static struct fanotify_event_metadata poll_buf[POLL_BUF_SIZE] = {0};
+  static struct fanotify_event_metadata poll_buf[POLL_BUF_SIZE] = {{0}};
   static char _path[PATH_MAX] = {0};
   static char file_path[PATH_MAX] = {0};
 
