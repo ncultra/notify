@@ -6,6 +6,12 @@ Tested with GCC 4.8.5 on Linux v3.10 and GCC 8.3.1 on Linux v5.2.11. It should b
 
 ### Building and Running
 
+Prerequisite: the glibc static library. If you don't have it you can install it using:
+
+`sudo yum install -y glibc-static`
+
+(or use the more recent `dnf` command if your Linux is not ancient).
+
 From within the notify directory:
 
 ```
