@@ -25,7 +25,7 @@
 #define FA_PERM_MASK (FAN_ACCESS_PERM | FAN_OPEN_PERM | FA_MARK_MASK)
 
 #define POLL_BUF_SIZE 2048
-#define PROC_BUF_SIZE 32
+#define PROC_BUF_SIZE 64
 /**
  * this is a hack because command lines can be too long to reasonably
  * store in a utility program buffer.
