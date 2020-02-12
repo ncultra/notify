@@ -229,7 +229,10 @@ static void read_poll(int fd)
       exit(EXIT_FAILURE);
     }
 
-    if (metadata->fd >= 0)
+    /**
+     * don't monitor ourselves
+     **/
+    if ((metadata->fd >= 0) && (metadata->pid != getpid()))
     {
       /**
        * marshall the file path and then see if it passes the filter
@@ -268,10 +271,10 @@ static void read_poll(int fd)
         permission(fd, metadata, FAN_ALLOW);
       }
       close(metadata->fd);
+      memset(_path, 0x00, PATH_MAX);
+      memset(file_path, 0x00, PATH_MAX);
     }
     metadata = FAN_EVENT_NEXT(metadata, len);
-    memset(_path, 0x00, PATH_MAX);
-    memset(file_path, 0x00, PATH_MAX);
   } /** while event ok **/
   memset(poll_buf, 0x00, sizeof(poll_buf));
   return;

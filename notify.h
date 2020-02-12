@@ -5,11 +5,11 @@
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <linux/fanotify.h>
 #include <sys/fanotify.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -31,10 +31,3 @@
  * store in a utility program buffer.
  **/
 #define FILE_BUF_SIZE PATH_MAX
-
-#if 0
-A program listening to fanotify events can compare this PID to the
-       PID returned by getpid(2), to determine whether the event is caused
-       by the listener itself, or is due to a file access by another
-       process.
-#endif
