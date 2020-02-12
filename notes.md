@@ -15,5 +15,7 @@ The most reliable way to guarantee 100% access to short-lived processes is to pa
 Another method is to write `ebpf` bytecode that does the same thing. You can inject this bytecode into the Linux kernel and it
 will hook kprobes. The [bcc project](https://github.com/iovisor/bcc) does this and is a good place to start. The ability to extract data from the kernel is limited and any monitoring actions need to be bytecode-safe as determined by the `ebpf` virtual machine.
 
+### Attacking the famonitor interface
 
-
+Each monitoring program can have multiple file handles via `fanotify_init()` and each of those file handles can have multiple monitoring hooks via `fanotify_mark()`. Each of these hooks gets passed to userspace via a call to `read()`. This may represent an opportunity for a denial-of-service attack by a file-intensive application that repeatedly forks itself.  
+ 
