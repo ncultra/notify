@@ -135,7 +135,7 @@ static int filter_path(const char *haystack, const char *needle)
  *
  * Most notifications get to this point after the originating process
  * is dead. We still have the process id, but usually there is no
- * corresponding for it directory under /proc.
+ * corresponding entry for it directory under /proc.
  *
  * However, when using the --permission argument, /proc/<pid> will usually
  * be evaluated before the process is dead.
@@ -161,6 +161,23 @@ static void get_pid_info(int32_t pid)
   snprintf(proc_buf, PROC_BUF_SIZE, "/proc/%d", pid);
 
   printf("pid: %d", pid);
+
+  /**
+   * print the process' user id
+   **/
+  snprintf(file_buf, FILE_BUF_SIZE, "%s/loginuid", proc_buf);
+  proc_fd = open(file_buf, O_RDONLY);
+  if (proc_fd == -1)
+  {
+    printf(" (expired)\n");
+    return;
+  }
+  bytes_read = read(proc_fd, file_buf, 4);
+  if (bytes_read > 0)
+  {
+    printf("\nuser id: %c%c%c%c\n", file_buf[0], file_buf[1], file_buf[2], file_buf[3]);
+  }
+  close(proc_fd);
 
   /**
    * print the process' command line
